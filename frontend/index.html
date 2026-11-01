@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nutrition Food Recommender</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="header-main">
+        <div class="logo-area">
+          <span class="icon">🥗</span>
+          <div>
+            <h1>Nutrition-Based Food Recommender</h1>
+            <p class="subtitle">Rule-based filtering, goal scoring, and intelligent query translation</p>
+          </div>
+        </div>
+        <div class="status-badge" id="systemStatus">
+          <span class="status-dot"></span>
+          <span id="statusText">Connecting...</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-layout">
+      <!-- Search & Filters Sidebar -->
+      <section class="controls-panel">
+        <form id="recommenderForm">
+          <!-- Text Query Card -->
+          <div class="card query-card">
+            <div class="card-header">
+              <label for="queryInput" class="section-title">
+                <span>💬 Natural Language Query</span>
+                <span class="badge" id="llmIndicator">AI Ready</span>
+              </label>
+            </div>
+            <textarea 
+              id="queryInput" 
+              name="query" 
+              rows="3" 
+              placeholder="e.g. high protein dinner under 500 calories, no chicken..."
+            ></textarea>
+            <div class="query-examples">
+              <span class="example-label">Try:</span>
+              <button type="button" class="btn-chip" data-query="high protein dinner under 500 calories, no chicken">High protein dinner &lt; 500 kcal</button>
+              <button type="button" class="btn-chip" data-query="low sodium snack with at least 5 g fiber">Low sodium high fiber snack</button>
+              <button type="button" class="btn-chip" data-query="breakfast under 300 calories with low sugar">Breakfast &lt; 300 kcal low sugar</button>
+            </div>
+          </div>
+
+          <!-- Structured Filters -->
+          <div class="card filters-card">
+            <h2 class="section-title">⚙️ Structured Filters &amp; Goals</h2>
+
+            <!-- Meal Type -->
+            <div class="form-group">
+              <label for="mealTypeSelect">Meal Type</label>
+              <select id="mealTypeSelect" name="meal_type">
+                <option value="">Any Meal Type</option>
+              </select>
+            </div>
+
+            <!-- Goals -->
+            <div class="form-group">
+              <label>Nutrition Goals (Soft Ranking)</label>
+              <div id="goalsContainer" class="chips-grid">
+                <!-- Dynamically loaded -->
+              </div>
+            </div>
+
+            <!-- Categories -->
+            <div class="form-group">
+              <label>Food Categories</label>
+              <div id="categoriesContainer" class="chips-grid">
+                <!-- Dynamically loaded -->
+              </div>
+            </div>
+
+            <!-- Nutrient Limits -->
+            <div class="form-group">
+              <label>Nutrient Limits</label>
+              <div class="limits-grid">
+                <div class="input-field">
+                  <span class="field-label">Min Calories</span>
+                  <input type="number" id="minCalories" name="min_calories" min="0" step="1">
+                </div>
+                <div class="input-field">
+                  <span class="field-label">Max Calories</span>
+                  <input type="number" id="maxCalories" name="max_calories" min="0" step="1">
+                </div>
+                <div class="input-field">
+                  <span class="field-label">Min Protein (g)</span>
+                  <input type="number" id="minProtein" name="min_protein" min="0" step="1">
+                </div>
+                <div class="input-field">
+                  <span class="field-label">Max Carbs (g)</span>
+                  <input type="number" id="maxCarbs" name="max_carbs" min="0" step="1">
+                </div>
+                <div class="input-field">
+                  <span class="field-label">Max Fat (g)</span>
+                  <input type="number" id="maxFat" name="max_fat" min="0" step="1">
+                </div>
+                <div class="input-field">
+                  <span class="field-label">Min Fiber (g)</span>
+                  <input type="number" id="minFiber" name="min_fiber" min="0" step="1">
+                </div>
+                <div class="input-field">
+                  <span class="field-label">Max Sugars (g)</span>
+                  <input type="number" id="maxSugars" name="max_sugars" min="0" step="1">
+                </div>
+                <div class="input-field">
+                  <span class="field-label">Max Sodium (mg)</span>
+                  <input type="number" id="maxSodium" name="max_sodium" min="0" step="1">
+                </div>
+                <div class="input-field full-span">
+                  <span class="field-label">Max Cholesterol (mg)</span>
+                  <input type="number" id="maxCholesterol" name="max_cholesterol" min="0" step="1">
+                </div>
+              </div>
+            </div>
+
+            <!-- Keyword Inclusion / Exclusion -->
+            <div class="form-group">
+              <label for="includeKeywords">Include Words (comma-separated)</label>
+              <input type="text" id="includeKeywords" placeholder="e.g. salmon, beef">
+            </div>
+            <div class="form-group">
+              <label for="excludeKeywords">Exclude Words (comma-separated)</label>
+              <input type="text" id="excludeKeywords" placeholder="e.g. chicken, pork">
+            </div>
+
+            <!-- Condiments and Top K -->
+            <div class="form-group row-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="includeCondiments" name="include_condiments">
+                <span>Include Condiments</span>
+              </label>
+              <div class="top-k-wrapper">
+                <label for="topKInput">Results:</label>
+                <input type="number" id="topKInput" name="top_k" min="1" max="50" value="10">
+              </div>
+            </div>
+
+            <!-- Form Buttons -->
+            <div class="form-actions">
+              <button type="submit" id="submitBtn" class="btn btn-primary">
+                <span class="btn-text">Find Foods</span>
+                <span class="spinner" style="display: none;"></span>
+              </button>
+              <button type="button" id="resetBtn" class="btn btn-secondary">Reset</button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <!-- Results Display Section -->
+      <section class="results-panel">
+        <!-- Error Banner -->
+        <div id="errorBanner" class="alert alert-error" style="display: none;"></div>
+
+        <!-- Warnings Banner -->
+        <div id="warningsBanner" class="alert alert-warning" style="display: none;"></div>
+
+        <!-- Interpretation Banner -->
+        <div id="interpretedBanner" class="card interpreted-card" style="display: none;">
+          <div class="interpreted-header">
+            <span class="icon">💡</span>
+            <h3>How your query was understood:</h3>
+          </div>
+          <div id="interpretedContent" class="interpreted-tags"></div>
+        </div>
+
+        <!-- Matches Header -->
+        <div class="results-header" id="resultsHeader" style="display: none;">
+          <h2 id="matchesCountTitle">0 Foods Found</h2>
+          <span id="matchesSubtitle" class="text-muted">Showing top recommendations</span>
+        </div>
+
+        <!-- Results Grid -->
+        <div id="resultsGrid" class="results-grid">
+          <div class="empty-placeholder">
+            <div class="empty-icon">🍽️</div>
+            <h3>Ready to find food recommendations</h3>
+            <p>Select your preferences or enter a description above, then click <strong>Find Foods</strong>.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
