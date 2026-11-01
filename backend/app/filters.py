@@ -77,3 +77,4 @@ def build_filter_query(prefs: Preferences) -> Tuple[str, List[Any]]:
         where_sql = "WHERE " + " AND ".join(clauses)
 
     return where_sql, params
+

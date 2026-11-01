@@ -51,7 +51,8 @@ document.addEventListener("DOMContentLoaded", () => {
       statusText.textContent = `${data.foods} Foods Indexed`;
 
       if (data.llm_configured) {
-        llmIndicator.textContent = "AI Ready";
+        const providerName = data.llm_provider === "ollama" ? `Ollama: ${data.llm_model}` : `Gemini: ${data.llm_model}`;
+        llmIndicator.textContent = `${providerName}`;
         llmIndicator.style.background = "#eff6ff";
         llmIndicator.style.color = "#2563eb";
       } else {
@@ -399,3 +400,4 @@ document.addEventListener("DOMContentLoaded", () => {
   checkHealth();
   loadOptions();
 });
+

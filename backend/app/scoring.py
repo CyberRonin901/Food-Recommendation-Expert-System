@@ -67,3 +67,4 @@ def score_and_rank_foods(rows: List[Dict[str, Any]], prefs: Preferences) -> List
             deduped_results.append(item)
 
     return deduped_results
+

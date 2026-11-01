@@ -640,9 +640,17 @@ services:
 **`.env.example`**
 
 ```text
-# Copy this file to .env and fill in the key. Never commit .env.
+# Set to true to use local Ollama model; set to false to use Google Gemini
+USE_LOCAL_LLM=false
+
+# Ollama settings (used when USE_LOCAL_LLM=true)
+OLLAMA_MODEL=llama3.2
+OLLAMA_BASE_URL=http://localhost:11434
+# For Docker users where Ollama runs on host:
+# OLLAMA_BASE_URL=http://host.docker.internal:11434
+
+# Gemini settings (used when USE_LOCAL_LLM=false)
 GEMINI_API_KEY=
-# Confirm the current model name in Google AI Studio (see README section 8.4)
 GEMINI_MODEL=gemini-3.8-flash
 ```
 

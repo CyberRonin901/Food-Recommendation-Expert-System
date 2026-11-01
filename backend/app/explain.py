@@ -62,3 +62,4 @@ def generate_reasons(row: Dict[str, Any], prefs: Preferences) -> List[str]:
         reasons.append(f"Listed as a {row['meal_type']} food")
 
     return reasons
+

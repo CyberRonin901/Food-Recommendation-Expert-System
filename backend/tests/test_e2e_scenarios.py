@@ -113,3 +113,4 @@ def test_scenario_10_deduplicate_names():
     assert res.status_code == 200
     matches = [r for r in res.json()["results"] if "Salami (3 slices)" in r["name"]]
     assert len(matches) <= 1
+

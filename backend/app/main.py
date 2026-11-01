@@ -7,7 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.config import DB_PATH, FRONTEND_DIR, GEMINI_API_KEY
+from app.config import (
+    DB_PATH,
+    FRONTEND_DIR,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    OLLAMA_MODEL,
+    USE_LOCAL_LLM,
+)
 from app.db import get_connection, get_db
 from app.pipeline import recommend
 from app.schemas import (
@@ -55,10 +62,21 @@ def health_check(conn: sqlite3.Connection = Depends(get_db)):
         print(f"Health check DB error: {e}")
         food_count = 0
 
+    if USE_LOCAL_LLM:
+        llm_configured = bool(OLLAMA_MODEL and OLLAMA_MODEL.strip())
+        provider = "ollama"
+        model = OLLAMA_MODEL
+    else:
+        llm_configured = bool(GEMINI_API_KEY and GEMINI_API_KEY.strip())
+        provider = "gemini"
+        model = GEMINI_MODEL
+
     return HealthResponse(
         status="ok",
         foods=food_count,
-        llm_configured=bool(GEMINI_API_KEY and GEMINI_API_KEY.strip()),
+        llm_configured=llm_configured,
+        llm_provider=provider,
+        llm_model=model,
     )
 
 
@@ -141,3 +159,4 @@ def post_recommend(
 # Serve frontend static assets if the directory exists
 if os.path.exists(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+

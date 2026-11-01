@@ -8,3 +8,4 @@ python scripts/build_database.py \
 
 echo "Starting application..."
 exec "$@"
+

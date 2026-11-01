@@ -157,3 +157,4 @@ def recommend(request: RecommendRequest, conn: sqlite3.Connection) -> RecommendR
         results=results,
         warnings=warnings,
     )
+

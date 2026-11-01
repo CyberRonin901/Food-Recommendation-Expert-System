@@ -6,6 +6,8 @@ services:
     env_file:
       - path: .env
         required: false        # the app still starts without a .env file
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 10s

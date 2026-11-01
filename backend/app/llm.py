@@ -1,7 +1,17 @@
 import json
 import logging
 from typing import Optional, Tuple
-from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT
+import httpx
+
+from app.config import (
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    GEMINI_TIMEOUT,
+    OLLAMA_BASE_URL,
+    OLLAMA_MODEL,
+    OLLAMA_TIMEOUT,
+    USE_LOCAL_LLM,
+)
 from app.schemas import Preferences
 
 logger = logging.getLogger(__name__)
@@ -20,7 +30,83 @@ Instructions:
 """
 
 
-def extract_preferences_from_query(
+def extract_preferences_from_ollama(
+    query: str,
+    base_url: Optional[str] = None,
+    model_name: Optional[str] = None,
+    timeout: Optional[float] = None,
+) -> Tuple[Optional[Preferences], Optional[str]]:
+    """
+    Calls local Ollama chat API with JSON schema constraint.
+    Returns (Preferences, warning_message).
+    """
+    url = f"{(base_url or OLLAMA_BASE_URL).rstrip('/')}/api/chat"
+    model = model_name or OLLAMA_MODEL
+    req_timeout = timeout or OLLAMA_TIMEOUT
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": query},
+        ],
+        "format": Preferences.model_json_schema(),
+        "stream": False,
+        "options": {"temperature": 0.0},
+    }
+
+    for attempt in range(2):
+        try:
+            with httpx.Client(timeout=req_timeout) as client:
+                resp = client.post(url, json=payload)
+
+            if resp.status_code == 404:
+                return (
+                    None,
+                    f"Ollama model '{model}' not found on host. Run `ollama pull {model}`.",
+                )
+
+            resp.raise_for_status()
+            data = resp.json()
+            raw_content = data.get("message", {}).get("content", "{}")
+            prefs = Preferences.model_validate_json(raw_content)
+            return prefs, None
+
+        except json.JSONDecodeError as jde:
+            if attempt == 0:
+                logger.warning(f"Invalid JSON from Ollama, retrying once: {jde}")
+                continue
+            return (
+                None,
+                "Ollama returned an invalid response format; using the form only.",
+            )
+        except httpx.ConnectError:
+            target_url = base_url or OLLAMA_BASE_URL
+            return (
+                None,
+                f"Could not connect to Ollama at {target_url}. Make sure Ollama is running (`ollama serve`).",
+            )
+        except httpx.TimeoutException:
+            return (
+                None,
+                f"Local Ollama request timed out after {req_timeout}s; using the form only.",
+            )
+        except Exception as e:
+            if attempt == 0:
+                logger.warning(f"Error calling Ollama, retrying once: {e}")
+                continue
+            return (
+                None,
+                f"Ollama request error ({type(e).__name__}); using the form only.",
+            )
+
+    return (
+        None,
+        "The text query could not be processed by Ollama; using the form only.",
+    )
+
+
+def extract_preferences_from_gemini(
     query: str,
     api_key: Optional[str] = None,
     model_name: Optional[str] = None,
@@ -29,7 +115,6 @@ def extract_preferences_from_query(
     """
     Calls Gemini API to parse natural language text into a structured Preferences object.
     Returns (Preferences, warning_message).
-    Never raises an exception — on failure, returns (None, warning).
     """
     key = api_key or GEMINI_API_KEY
     if not key or key.strip() == "":
@@ -55,7 +140,6 @@ def extract_preferences_from_query(
             http_options=types.HttpOptions(timeout=int(call_timeout * 1000)),
         )
 
-        # First attempt
         for attempt in range(2):
             try:
                 response = client.models.generate_content(
@@ -76,7 +160,6 @@ def extract_preferences_from_query(
                 )
             except Exception as e:
                 err_str = str(e)
-                # Check for quota or auth errors - do not retry
                 if "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower() or "429" in err_str:
                     return (
                         None,
@@ -111,4 +194,31 @@ def extract_preferences_from_query(
         return (
             None,
             f"The text query could not be processed ({type(e).__name__}); using the form only.",
+        )
+
+
+def extract_preferences_from_query(
+    query: str,
+    use_local_llm: Optional[bool] = None,
+    api_key: Optional[str] = None,
+    model_name: Optional[str] = None,
+    timeout: Optional[float] = None,
+) -> Tuple[Optional[Preferences], Optional[str]]:
+    """
+    Extracts preferences using local Ollama if USE_LOCAL_LLM is True,
+    otherwise uses Gemini API.
+    """
+    use_local = USE_LOCAL_LLM if use_local_llm is None else use_local_llm
+    if use_local:
+        return extract_preferences_from_ollama(
+            query=query,
+            model_name=model_name,
+            timeout=timeout,
+        )
+    else:
+        return extract_preferences_from_gemini(
+            query=query,
+            api_key=api_key,
+            model_name=model_name,
+            timeout=timeout,
         )

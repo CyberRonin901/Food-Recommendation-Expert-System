@@ -99,3 +99,4 @@ def test_broken_csv_causes_exit():
             os.remove(tmp_csv_path)
         if os.path.exists(tmp_db_path):
             os.remove(tmp_db_path)
+

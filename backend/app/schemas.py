@@ -111,6 +111,8 @@ class HealthResponse(BaseModel):
     status: str
     foods: int
     llm_configured: bool
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
 
 
 class NutrientRange(BaseModel):
