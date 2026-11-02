@@ -51,7 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
       statusText.textContent = `${data.foods} Foods Indexed`;
 
       if (data.llm_configured) {
-        const providerName = data.llm_provider === "ollama" ? `Ollama: ${data.llm_model}` : `Gemini: ${data.llm_model}`;
+        const providerName = data.llm_provider === "ollama" ? `Ollama: ${data.llm_model}` : `API: ${data.llm_model}`;
         llmIndicator.textContent = `${providerName}`;
         llmIndicator.style.background = "#eff6ff";
         llmIndicator.style.color = "#2563eb";

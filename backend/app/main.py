@@ -9,9 +9,9 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import (
     DB_PATH,
+    EXTERNAL_API_KEY,
+    EXTERNAL_MODEL,
     FRONTEND_DIR,
-    GEMINI_API_KEY,
-    GEMINI_MODEL,
     OLLAMA_MODEL,
     USE_LOCAL_LLM,
 )
@@ -67,9 +67,9 @@ def health_check(conn: sqlite3.Connection = Depends(get_db)):
         provider = "ollama"
         model = OLLAMA_MODEL
     else:
-        llm_configured = bool(GEMINI_API_KEY and GEMINI_API_KEY.strip())
-        provider = "gemini"
-        model = GEMINI_MODEL
+        llm_configured = bool(EXTERNAL_API_KEY and EXTERNAL_API_KEY.strip())
+        provider = "external"
+        model = EXTERNAL_MODEL
 
     return HealthResponse(
         status="ok",

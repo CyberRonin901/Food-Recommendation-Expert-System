@@ -1,24 +1,48 @@
 # Nutrition-Based Food Recommender (Expert System)
 
-A small web app where the user fills in a form and/or types a sentence, and gets back a ranked list of foods that match. Filtering is done by **rules** (hard constraints), ranking by a **weighted score**, and the **Gemini API** only translates the typed sentence into structured filters.
+A small web app where the user fills in a form and/or types a sentence, and gets back a ranked list of foods that match. Filtering is done by **rules** (hard constraints), ranking by a **weighted score**, and an **LLM** (local via **Ollama** or any external API such as **Google Gemini, OpenAI, Groq, DeepSeek, Mistral, OpenRouter**) translates the typed sentence into structured filters.
 
-- **Backend:** Python, FastAPI, SQLite
-- **Frontend:** plain HTML + CSS + JavaScript (no framework, no build step)
-- **LLM:** Gemini API, called from the backend (optional layer: the app works without a key)
-- **Packaging:** Docker + Docker Compose. One command builds the image, creates the database from the CSV **inside the container**, and starts the app. The only thing anyone opens is the web page.
-- **Dataset:** `daily_food_nutrition_dataset.csv` (651 rows, 12 columns)
+- **Backend:** Python 3.12, FastAPI, SQLite
+- **Frontend:** Plain HTML + CSS + JavaScript (no framework, no build step)
+- **LLM Support:** Dual-mode flexible architecture:
+  - **Local LLM:** Ollama (e.g. `llama3.2`, `gemma`, `mistral`, `qwen2.5`) on your host machine — 100% private, no API key needed.
+  - **External LLM:** Any cloud API (Gemini, OpenAI, Groq, DeepSeek, Mistral, OpenRouter, etc.) via API key and model name.
+  - **Optional Layer:** The app works completely offline without any LLM configured; all rule-based filters and goals remain functional.
+- **Packaging:** Docker + Docker Compose, or direct local Python virtual environment.
+- **Dataset:** `daily_food_nutrition_dataset.csv` (651 rows cleaned & validated to 597 rows, 12 columns)
 
 > This plan replaces the first version. That version assumed cuisine, price, ingredients, diet type and spice level. **None of those exist in this dataset**, so the project is now a *nutrition-based* food finder. See [What changed](#2-what-changed-from-the-first-plan).
 
 ## Quick start
 
-Needs only Docker (Docker Desktop, or Docker Engine with Compose v2).
+The project can be run either **with Docker** (recommended for a zero-install containerized setup) or **manually** with Python on your machine.
+
+### Option 1: Run with Docker
 
 ```bash
+# 1. (Optional) Configure LLM settings:
+cp .env.example .env
+
+# 2. Build and launch:
 docker compose up --build
 ```
+Open **http://localhost:8000** in your browser.
 
-Then open **http://localhost:8000**. To enable the free-text query box, first add a Gemini API key (see [section 14](#14-setup-and-run)). Without a key, everything else still works.
+### Option 2: Run Manually (Local Python)
+
+```bash
+# 1. Setup virtual environment and dependencies:
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+
+# 2. Build the SQLite database from CSV:
+python backend/scripts/build_database.py --csv data/daily_food_nutrition_dataset.csv --db data/foods.db
+
+# 3. Start the application server:
+cd backend && uvicorn app.main:app --reload --port 8000
+```
+Open **http://localhost:8000**. See [Section 14](#14-setup-and-run) for detailed setup and LLM configuration.
 
 ---
 
@@ -113,7 +137,7 @@ A filter that is wrong in both directions is misleading. Users can type words in
 | Validation | Pydantic | Request/response models, and checking the LLM's JSON |
 | Database | SQLite via `sqlite3` | A single file, `data/foods.db`, created inside the container at start |
 | Data cleaning | pandas + `csv` module | Used only by the build script |
-| LLM | Gemini API via the `google-genai` package | Called from the backend only. The key never reaches the browser. |
+| LLM | Local Ollama OR any External API (Gemini, OpenAI, Groq, DeepSeek, Mistral, OpenRouter) | Switchable via `USE_LOCAL_LLM` flag in `.env`. The app works fully even without an LLM. |
 | Frontend | HTML + CSS + JS (`fetch`) | Served by FastAPI from the `frontend/` folder |
 | Packaging | Docker + Docker Compose | One `app` service |
 | Tests | pytest + httpx | httpx is needed for FastAPI's `TestClient` |
@@ -349,16 +373,36 @@ Response (**illustrative**: the `id`, `score`, `total_matches` and percentages a
 
 ---
 
-## 8. LLM (Gemini API)
+## 8. LLM Layer (Local Ollama & External APIs)
 
-**Job:** turn `query` into a `Preferences` object. Nothing else.
+**Job:** turn natural language `query` into a structured `Preferences` object. Nothing else.
 
-### 8.1 Schema (in `schemas.py`)
+The LLM never queries the database directly and never hallucinates food items. It only extracts user constraints into structured filters. If no LLM is configured or an LLM call fails, the app degrades gracefully and uses the form inputs directly.
+
+### 8.1 Dual-Provider Architecture
+
+The application supports two operating modes, toggled via `USE_LOCAL_LLM` in `.env`:
+
+| Mode | Provider | Use Case | Key Environment Variables |
+|---|---|---|---|
+| **Local LLM** (`USE_LOCAL_LLM=true`) | **Ollama** | 100% offline, local machine, private data, zero API cost | `OLLAMA_MODEL=llama3.2`, `OLLAMA_BASE_URL=http://localhost:11434` |
+| **External API** (`USE_LOCAL_LLM=false`) | **Any External LLM API** | High speed, no local GPU/CPU load needed | `EXTERNAL_API_KEY=...`, `EXTERNAL_MODEL=...`, `EXTERNAL_BASE_URL=...` |
+
+Supported external LLM providers include:
+- **Google Gemini:** `EXTERNAL_MODEL=gemini-3.8-flash` (or `gemini-2.5-flash`), `EXTERNAL_API_KEY=your_key`
+- **OpenAI:** `EXTERNAL_MODEL=gpt-4o` (or `gpt-4o-mini`), `EXTERNAL_API_KEY=your_key`
+- **Groq:** `EXTERNAL_MODEL=llama-3.3-70b-versatile`, `EXTERNAL_BASE_URL=https://api.groq.com/openai/v1`
+- **DeepSeek:** `EXTERNAL_MODEL=deepseek-chat`, `EXTERNAL_BASE_URL=https://api.deepseek.com/v1`
+- **Mistral:** `EXTERNAL_MODEL=mistral-small-latest`, `EXTERNAL_BASE_URL=https://api.mistral.ai/v1`
+- **OpenRouter:** `EXTERNAL_MODEL=meta-llama/llama-3.3-70b-instruct`, `EXTERNAL_BASE_URL=https://openrouter.ai/api/v1`
+- **Any OpenAI-compatible proxy or local server** (e.g. vLLM, LiteLLM, LocalAI)
+
+### 8.2 Schema (in `schemas.py`)
 
 ```text
 meal_type:          "Breakfast" | "Lunch" | "Dinner" | "Snack" | null
 categories:         list of the 13 main categories
-goals:              list of the 7 goals above
+goals:              list of the 7 goals
 include_keywords:   list of strings
 exclude_keywords:   list of strings
 include_condiments: bool
@@ -367,28 +411,17 @@ min_fiber, max_sugars, max_sodium, max_cholesterol:  number >= 0, or null
 top_k:              1 to 50
 ```
 
-Fields use `Literal[...]` types, so a valid reply cannot contain a category that does not exist (`"North Indian"`, `"Italian"`).
+- **For Ollama:** Passed as native JSON schema constraint (`format: Preferences.model_json_schema()`), guaranteeing valid structured JSON output directly from the local model.
+- **For External APIs:** Passed via Gemini's structured output schema or standard OpenAI-compatible JSON mode with system prompt schema instructions.
+- Both outputs are validated strictly through Pydantic (`Preferences.model_validate_json`).
 
-**Day-one check (schema size):** Google's structured-output documentation warns that schemas with many optional properties or many `anyOf` branches can be rejected with a `400 INVALID_ARGUMENT` error. Pydantic turns every `Optional[...]` field into an `anyOf`, and this schema has about 16 optional fields. Send the real schema to Gemini on day one. If it is rejected, send a flatter schema instead (for example `limits` as a list of `{ "field": <one of the 9 limit names>, "value": <number> }` items) and convert it into `Preferences` in Python.
+### 8.3 Error Handling and Graceful Fallback
 
-### 8.2 How to call it
-
-- Use the `google-genai` package (`from google import genai`). Create the client inside `llm.py` with the key from the `GEMINI_API_KEY` environment variable.
-- Ask for **JSON output with a schema** built from `Preferences.model_json_schema()`, with temperature 0. Google's docs currently show this as a `response_format` containing the `application/json` MIME type and the schema. SDK method names have changed between versions, so **copy the exact call from the official Structured output page** (https://ai.google.dev/gemini-api/docs/json-mode) and keep it inside **one function** in `llm.py`. A future change is then a one-place edit.
-- The system prompt lists the allowed values and says: *fill only what the user actually stated, leave everything else null, never guess a number.*
-- **Validate again with Pydantic** (`Preferences.model_validate_json`). Gemini does not enforce every schema constraint, and a model can still return wrong values.
-- Retry **once** on invalid JSON. Do **not** retry on quota or authentication errors.
-- Set a timeout (~15 to 30 s) so a slow call cannot freeze the page. The page shows a loading state.
-- **Any failure must not break the app:** missing key, no internet, rejected key, quota or rate limit, timeout, invalid JSON. In all of these, continue with the form fields and add a warning.
-- Always return the `interpreted` preferences so the user sees what was understood.
-
-### 8.3 Privacy, cost and key safety
-
-- **What is sent to Google:** only the sentence the user typed plus the instructions (allowed values). The food data is never sent.
-- **Free-tier data use:** as of 2026-11-01, Google's pricing page states that content sent on the free tier may be used to improve Google's products, and that paid-tier content is not. Tell testers **not to type personal information**, and check Google's current terms for whichever tier you use.
-- **Limits:** the free tier has request limits (shown in Google AI Studio). Because every failure falls back to the form, hitting the limit degrades the app but does not break it.
-- **Key safety:** the key is read only by the backend, lives in `.env` (git-ignored, excluded from the Docker image), and is passed to the container at run time. Never put it in `app.js`, the Dockerfile, or a commit. If it leaks, revoke it in AI Studio and create a new one.
-- **Stretch goal:** a small per-IP rate limit if the demo is shown to a large audience.
+Any LLM failure never crashes the application:
+1. **Missing or empty API key:** Continues with the form inputs, displaying an informative badge/warning.
+2. **Ollama connection failure / server down:** Returns a helpful notice (`"Could not connect to Ollama at http://localhost:11434. Make sure 'ollama serve' is running."`) while processing the form.
+3. **Invalid JSON / Markdown wrapping:** Strips code blocks and retries once automatically.
+4. **Rate limits, quota exhaustion (429), or timeout:** Intercepted with user warnings; the app continues using the structured form filters.
 
 ### 8.4 Choosing the model
 
@@ -524,97 +557,137 @@ Day-one blockers are removed by committing `schemas.py`, a 20-row sample of the 
 
 ## 14. Setup and run
 
-### 14.1 With Docker (recommended)
+The system can be run in two ways:
+1. **With Docker (recommended):** One command builds the container, initializes the database, and starts the server.
+2. **Manually (without Docker):** Direct Python virtual environment on your host machine.
 
-**You need:** Docker Desktop (or Docker Engine with Compose v2). Nothing else: no Python, no database, no model download.
+---
 
-1. **(Optional, enables the text query box)** Create a Gemini API key in Google AI Studio, then:
-   ```bash
-   cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
-   ```
-   Open `.env` and paste the key after `GEMINI_API_KEY=`. Skip this step to run without text queries.
-2. **Start everything:**
+### 14.1 Configuration (`.env`)
+
+Copy the template to create your `.env` file:
+
+```bash
+cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
+```
+
+#### Mode A: Use Local Ollama (Offline, 100% Private, Free)
+Make sure [Ollama](https://ollama.ai) is installed and running (`ollama serve`), then pull your preferred model (e.g. `ollama pull llama3.2` or `ollama pull gemma`):
+
+```dotenv
+USE_LOCAL_LLM=true
+OLLAMA_MODEL=llama3.2
+
+# If running manually on host:
+OLLAMA_BASE_URL=http://localhost:11434
+
+# If running inside Docker container (points to Ollama on your host):
+# OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
+
+#### Mode B: Use Any External LLM API (Gemini, OpenAI, Groq, DeepSeek, etc.)
+Set `USE_LOCAL_LLM=false` and provide your API key and model name:
+
+```dotenv
+USE_LOCAL_LLM=false
+
+# 1. Google Gemini (default)
+EXTERNAL_API_KEY=your_gemini_api_key
+EXTERNAL_MODEL=gemini-3.8-flash
+
+# 2. OpenAI
+# EXTERNAL_API_KEY=your_openai_api_key
+# EXTERNAL_MODEL=gpt-4o-mini
+
+# 3. Groq (Ultra-fast inference)
+# EXTERNAL_API_KEY=your_groq_api_key
+# EXTERNAL_MODEL=llama-3.3-70b-versatile
+# EXTERNAL_BASE_URL=https://api.groq.com/openai/v1
+
+# 4. DeepSeek
+# EXTERNAL_API_KEY=your_deepseek_api_key
+# EXTERNAL_MODEL=deepseek-chat
+# EXTERNAL_BASE_URL=https://api.deepseek.com/v1
+
+# 5. OpenRouter
+# EXTERNAL_API_KEY=your_openrouter_api_key
+# EXTERNAL_MODEL=meta-llama/llama-3.3-70b-instruct
+# EXTERNAL_BASE_URL=https://openrouter.ai/api/v1
+```
+
+#### Mode C: No LLM (Form Only)
+Leave `.env` empty or omit it. The application still starts, the SQLite database is built, and all structured form filters, goals, and scoring work normally.
+
+---
+
+### 14.2 Option 1: Run with Docker (Recommended)
+
+**Requirements:** Docker Desktop (or Docker Engine with Docker Compose v2).
+
+1. **Start the application:**
    ```bash
    docker compose up --build
    ```
-3. **Open http://localhost:8000.** That is the whole interface. (`/docs` shows the API.)
+2. **Open http://localhost:8000** in your browser.
+   - Interactive Swagger API docs: **http://localhost:8000/docs**
+   - Health check: **http://localhost:8000/api/health**
 
-**What happens when you run it**
+**What happens on start:**
+- Docker installs dependencies into a Python 3.12-slim image.
+- `docker/entrypoint.sh` runs `build_database.py`, repairing CSV anomalies, deduplicating records, calculating nutrient percentiles, and verifying all 597 rows.
+- If any data validation check fails, the container aborts immediately with an error log.
+- Uvicorn launches the FastAPI app serving both the API routes and the frontend interface.
 
-1. *Image build:* Docker installs the Python packages and copies the backend, the frontend and the CSV into the image.
-2. *Container start:* `entrypoint.sh` runs `build_database.py`, which reads the CSV, repairs the 6 broken rows, removes duplicates, and creates `foods.db` with 597 rows. If any check fails, the container stops and the logs say why.
-3. *Server start:* Uvicorn serves the API and the frontend on port 8000.
-4. *Health check:* Compose calls `/api/health` every 10 seconds, and `docker compose ps` shows `healthy` once it answers.
-
-**Why there is no volume and no database container:** `foods.db` is derived data. It is recreated from the CSV on every start in about a second, so there is nothing to persist and nothing that can drift out of sync. To change the data, edit the CSV and run `docker compose up --build`.
-
-**Common commands**
+**Useful Docker commands:**
 
 | Task | Command |
 |---|---|
-| Start in the background | `docker compose up --build -d` |
-| Watch the logs | `docker compose logs -f app` |
-| Stop and remove the container | `docker compose down` |
-| Rebuild after changing code | `docker compose up --build` |
-| Apply a changed `.env` | `docker compose up -d --force-recreate` |
-| Run the tests inside the container | `docker compose run --rm app pytest` |
-| Open a shell in the container | `docker compose run --rm app sh` |
+| Start in background | `docker compose up --build -d` |
+| View live logs | `docker compose logs -f app` |
+| Stop container | `docker compose down` |
+| Re-run tests inside container | `docker compose run --rm app pytest` |
+| Open container shell | `docker compose run --rm app sh` |
 
-**Troubleshooting**
+---
 
-| Symptom | Fix |
-|---|---|
-| `port is already allocated` | Change `"8000:8000"` to `"8080:8000"` in `docker-compose.yml` and open http://localhost:8080 |
-| Windows: `exec /entrypoint.sh: no such file or directory` | Line endings were changed to CRLF. `.gitattributes` prevents this; if the file was already checked out, run `git add --renormalize .`, re-checkout, and rebuild |
-| Text queries return a warning | The key is missing, wrong, or out of quota. Check `.env`, then `docker compose up -d --force-recreate` |
-| Container never becomes `healthy` | Run `docker compose logs app`. The most likely cause is a failed database check in `build_database.py` |
-| `env_file ... required` error on an old Compose | Upgrade Docker, or run `cp .env.example .env` once |
+### 14.3 Option 2: Run Manually (Local Development)
 
-### 14.2 The Docker files
+**Requirements:** Python 3.11 or 3.12.
 
-**`Dockerfile`**
+1. **Create and activate a virtual environment:**
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate              # Windows: .venv\Scripts\activate
+   ```
 
-```dockerfile
-FROM python:3.12-slim
+2. **Install dependencies:**
+   ```bash
+   pip install -r backend/requirements.txt
+   ```
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+3. **Build the SQLite database from the dataset CSV:**
+   ```bash
+   python backend/scripts/build_database.py \
+       --csv data/daily_food_nutrition_dataset.csv \
+       --db data/foods.db
+   ```
+   *(Safe to run anytime; drops and reconstructs `foods.db` in under a second).*
 
-WORKDIR /app
+4. **Launch the FastAPI application server:**
+   ```bash
+   cd backend && uvicorn app.main:app --reload --port 8000
+   ```
 
-# Install dependencies first so this layer is cached between code changes
-COPY backend/requirements.txt backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
+5. **Open http://localhost:8000.**
 
-COPY backend/ backend/
-COPY frontend/ frontend/
-COPY data/daily_food_nutrition_dataset.csv data/daily_food_nutrition_dataset.csv
-COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+6. **Run the test suite:**
+   ```bash
+   PYTHONPATH=backend pytest backend/tests
+   ```
 
-WORKDIR /app/backend
-EXPOSE 8000
+---
 
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-**`docker/entrypoint.sh`**
-
-```sh
-#!/bin/sh
-set -e
-
-echo "Building food database from CSV..."
-python scripts/build_database.py \
-    --csv ../data/daily_food_nutrition_dataset.csv \
-    --db ../data/foods.db
-
-echo "Starting application..."
-exec "$@"
-```
-
-`set -e` stops the container if the build script fails. `exec "$@"` runs whatever command follows (the Uvicorn `CMD`, or `pytest` for `docker compose run --rm app pytest`), so the database always exists first.
+### 14.4 Configuration & Docker Files
 
 **`docker-compose.yml`**
 
@@ -627,6 +700,8 @@ services:
     env_file:
       - path: .env
         required: false        # the app still starts without a .env file
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 10s
@@ -635,69 +710,31 @@ services:
       start_period: 10s
 ```
 
-`required: false` needs Docker Compose 2.24 or newer. The health check uses Python because the slim image has no `curl`.
-
 **`.env.example`**
 
-```text
-# Set to true to use local Ollama model; set to false to use Google Gemini
+```dotenv
+# ==============================================================================
+# LLM Provider Configuration
+# Set USE_LOCAL_LLM=true to use local Ollama model on the host.
+# Set USE_LOCAL_LLM=false to use an external LLM API.
+# ==============================================================================
 USE_LOCAL_LLM=false
 
-# Ollama settings (used when USE_LOCAL_LLM=true)
+# ==============================================================================
+# 1. Local Ollama Settings (used when USE_LOCAL_LLM=true)
+# ==============================================================================
 OLLAMA_MODEL=llama3.2
 OLLAMA_BASE_URL=http://localhost:11434
 # For Docker users where Ollama runs on host:
 # OLLAMA_BASE_URL=http://host.docker.internal:11434
 
-# Gemini settings (used when USE_LOCAL_LLM=false)
-GEMINI_API_KEY=
-GEMINI_MODEL=gemini-3.8-flash
-```
-
-**`.dockerignore`**
-
-```text
-.git
-.venv
-__pycache__
-*.pyc
-.pytest_cache
-.env
-data/foods.db
-```
-
-**`.gitignore`**
-
-```text
-.env
-.venv/
-__pycache__/
-.pytest_cache/
-data/foods.db
-```
-
-**`.gitattributes`**
-
-```text
-*.sh text eol=lf
-```
-
-### 14.3 Without Docker (for development)
-
-```bash
-python -m venv .venv
-source .venv/bin/activate              # Windows: .venv\Scripts\activate
-pip install -r backend/requirements.txt
-
-# build the database (safe to re-run)
-python backend/scripts/build_database.py \
-    --csv data/daily_food_nutrition_dataset.csv --db data/foods.db
-
-# optional: enable text queries
-export GEMINI_API_KEY=<your key>       # Windows PowerShell: $env:GEMINI_API_KEY="<your key>"
-
-# run the app
-cd backend && uvicorn app.main:app --reload
+# ==============================================================================
+# 2. External LLM API Settings (used when USE_LOCAL_LLM=false)
+# Works with ANY provider: Google Gemini, OpenAI, Groq, DeepSeek, Mistral, OpenRouter, etc.
+# ==============================================================================
+EXTERNAL_API_KEY=
+EXTERNAL_MODEL=gemini-3.8-flash
+EXTERNAL_BASE_URL=
 ```
 
 - App: http://127.0.0.1:8000
