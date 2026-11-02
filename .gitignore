@@ -3,4 +3,4 @@
 __pycache__/
 .pytest_cache/
 data/foods.db
-
+.vscode
