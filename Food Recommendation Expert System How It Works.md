@@ -1,7 +1,5 @@
 # Food Recommendation Expert System: How It Works
 
-Nov 2, 2026 · @Aditya Nanda
-
 ## 1. Overview
 
 The project is a nutrition-based food finder: the user sets filters, goals, or types a sentence, and the system returns a ranked list of foods from a cleaned 597-row dataset, each with a plain-language reason. It is an expert system because the decisions come from explicit rules and a transparent scoring formula, not from a model's guess. AI sits only at the input end, turning free text into structured filters.
