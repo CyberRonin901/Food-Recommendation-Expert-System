@@ -1,4 +1,4 @@
-# Nutrition-Based Food Recommender (Expert System)
+# Food Recommendation Expert System
 
 A small web app where the user fills in a form and/or types a sentence, and gets back a ranked list of foods that match. Filtering is done by **rules** (hard constraints), ranking by a **weighted score**, and an **LLM** (local via **Ollama** or any external API such as **Google Gemini, OpenAI, Groq, DeepSeek, Mistral, OpenRouter**) translates the typed sentence into structured filters.
 
@@ -7,7 +7,7 @@ A small web app where the user fills in a form and/or types a sentence, and gets
 - **LLM Support:** Dual-mode flexible architecture:
   - **Local LLM:** Ollama (e.g. `llama3.2`, `gemma`, `mistral`, `qwen2.5`) on your host machine — 100% private, no API key needed.
   - **External LLM:** Any cloud API (Gemini, OpenAI, Groq, DeepSeek, Mistral, OpenRouter, etc.) via API key and model name.
-  - **Optional Layer:** The app works completely offline without any LLM configured; all rule-based filters and goals remain functional.
+  - **Optional Layer:** The app works completely offline without any LLM configured; all rule-based filters and goals remain functional. Free-text requests fall back to a built-in keyword parser that maps high-level goals such as "weight loss" to nutrient goals like `high_protein` + `high_fiber`.
 - **Packaging:** Docker + Docker Compose, or direct local Python virtual environment.
 - **Dataset:** `daily_food_nutrition_dataset.csv` (651 rows cleaned & validated to 597 rows, 12 columns)
 

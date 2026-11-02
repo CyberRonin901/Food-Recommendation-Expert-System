@@ -1,0 +1,128 @@
+layer: recommend
+rules:
+  - id: R01
+    name: Supports high-protein goal (strong)
+    if: {all: [{fact: constraint.goals, has: high_protein}, {fact: food.tags, has: high_protein}]}
+    then: [{score: {cf: 0.9, reason: "High protein: {food.protein_g} g"}}]
+    basis: team_defined
+    source: S11
+
+  - id: R02
+    name: Supports high-protein goal (moderate)
+    if: {all: [{fact: constraint.goals, has: high_protein}, {fact: food.tags, has: protein_good}, {not: {fact: food.tags, has: high_protein}}]}
+    then: [{score: {cf: 0.5, reason: "Good protein source: {food.protein_g} g"}}]
+    basis: team_defined
+    source: S11
+
+  - id: R03
+    name: Supports high-fibre goal (strong)
+    if: {all: [{fact: constraint.goals, has: high_fiber}, {fact: food.tags, has: high_fiber}]}
+    then: [{score: {cf: 0.9, reason: "High fibre: {food.fiber_g} g"}}]
+    basis: team_defined
+    source: S11
+
+  - id: R04
+    name: Supports high-fibre goal (moderate)
+    if: {all: [{fact: constraint.goals, has: high_fiber}, {fact: food.tags, has: fiber_good}, {not: {fact: food.tags, has: high_fiber}}]}
+    then: [{score: {cf: 0.5, reason: "Good fibre source: {food.fiber_g} g"}}]
+    basis: team_defined
+    source: S11
+
+  - id: R05
+    name: Supports low-sodium goal
+    if: {all: [{fact: constraint.goals, has: low_sodium}, {fact: food.tags, has: low_sodium}]}
+    then: [{score: {cf: 0.8, reason: "Low sodium: {food.sodium_mg} mg"}}]
+    basis: team_defined
+    source: S11
+
+  - id: R06
+    name: Supports low-fat goal
+    if: {all: [{fact: constraint.goals, has: low_fat}, {fact: food.tags, has: low_fat}]}
+    then: [{score: {cf: 0.8, reason: "Low fat: {food.fat_g} g"}}]
+    basis: team_defined
+    source: S11
+
+  - id: R07
+    name: Supports low-cholesterol goal
+    if: {all: [{fact: constraint.goals, has: low_cholesterol}, {fact: food.tags, has: low_cholesterol}]}
+    then: [{score: {cf: 0.8, reason: "Low cholesterol: {food.cholesterol_mg} mg"}}]
+    basis: team_defined
+    source: S11
+
+  - id: R08
+    name: Supports low-sugar goal
+    if: {all: [{fact: constraint.goals, has: low_sugar}, {fact: food.tags, has: low_sugar}]}
+    then: [{score: {cf: 0.8, reason: "Low sugar: {food.sugars_g} g"}}]
+    basis: team_defined
+    source: S11
+
+  - id: R09
+    name: Supports low-carb goal
+    if: {all: [{fact: constraint.goals, has: low_carbs}, {fact: food.tags, has: low_carb}]}
+    then: [{score: {cf: 0.8, reason: "Low carbohydrate: {food.carbs_g} g"}}]
+    basis: team_defined
+    source: S11
+
+  - id: R10
+    name: Typical breakfast category
+    if: {all: [{fact: user.meal_type, is: Breakfast}, {fact: food.category_main, in: [Grain, Dairy, Fruit, Protein, Nut]}]}
+    then: [{score: {cf: 0.3, reason: "{food.category_main} is a typical breakfast category"}}]
+    basis: team_defined
+    source: S11
+
+  - id: R11
+    name: Weight-loss friendly food for a weight-loss goal
+    if: {all: [{fact: user.goal, is: weight_loss}, {fact: food.tags, has: weight_loss_friendly}]}
+    then: [{score: {cf: 0.6, reason: "Good protein without high fat, sugar or calories for a weight-loss goal"}}]
+    basis: team_defined
+    source: S11
+
+  - id: R12
+    name: Heart-friendly food for a heart-health goal
+    if: {all: [{fact: user.goal, is: heart_health}, {fact: food.tags, has: heart_friendly}]}
+    then: [{score: {cf: 0.7, reason: "No high sodium, cholesterol or fat flags"}}]
+    basis: team_defined
+    source: S1
+
+  - id: R13
+    name: Blood-sugar friendly food for a blood-sugar goal
+    if: {all: [{fact: user.goal, is: blood_sugar_control}, {fact: food.tags, has: blood_sugar_friendly}]}
+    then: [{score: {cf: 0.7, reason: "No high sugar or carbohydrate flags, with fibre or protein"}}]
+    basis: team_defined
+    source: S8
+
+  - id: R14
+    name: Balanced meal bonus
+    if: {all: [{fact: food.tags, has: balanced_meal}]}
+    then: [{score: {cf: 0.3, reason: "Balanced: protein and fibre without high sodium, sugar or calories"}}]
+    basis: team_defined
+    source: S3
+
+  - id: R15
+    name: Penalty, high sodium with hypertension
+    if: {all: [{fact: user.conditions, has: hypertension}, {fact: food.tags, has: high_sodium}]}
+    then: [{score: {cf: -0.9, reason: "High sodium ({food.sodium_mg} mg) with hypertension"}}]
+    basis: team_defined
+    source: S2
+
+  - id: R16
+    name: Penalty, high sugar with type 2 diabetes
+    if: {all: [{fact: user.conditions, has: type2_diabetes}, {fact: food.tags, has: high_sugar}]}
+    then: [{score: {cf: -0.9, reason: "High sugar ({food.sugars_g} g) with type 2 diabetes"}}]
+    basis: team_defined
+    source: S8
+
+  - id: R17
+    name: Penalty, high cholesterol item with high cholesterol
+    if: {all: [{fact: user.conditions, has: high_cholesterol}, {fact: food.tags, has: high_cholesterol_item}]}
+    then: [{score: {cf: -0.8, reason: "High cholesterol ({food.cholesterol_mg} mg) with high cholesterol"}}]
+    basis: team_defined
+    source: S4
+
+  - id: R18
+    name: Penalty, heavy meal on a weight-loss goal
+    if: {all: [{fact: user.goal, is: weight_loss}, {fact: food.tags, has: heavy_meal}]}
+    then: [{score: {cf: -0.6, reason: "Heavy item ({food.calories} kcal) for a weight-loss goal"}}]
+    basis: team_defined
+    source: S11
+

@@ -7,6 +7,114 @@ from app.schemas import FoodResult, Preferences, RecommendRequest, RecommendResp
 from app.scoring import score_and_rank_foods
 
 
+# Mapping from user-level goals (extracted by offline parser) to nutrient-level goals
+# used by the scoring system.
+USER_GOAL_TO_NUTRIENT_GOALS: Dict[str, List[str]] = {
+    "weight_loss": ["high_protein", "high_fiber"],
+    "muscle_gain": ["high_protein"],
+    "weight_gain": ["high_protein"],
+    "heart_health": ["low_sodium", "low_cholesterol", "low_fat", "high_fiber"],
+    "blood_sugar_control": ["low_sugar", "high_fiber", "low_carbs"],
+    "maintain": ["high_protein", "high_fiber"],
+}
+
+
+def parse_query_for_recommend(query: str) -> Preferences:
+    """
+    Offline keyword/regex parser for the /api/recommend endpoint.
+    Extracts meal type, goals, and keywords from free text without an LLM.
+    Maps user-level intent (e.g. 'weight loss') to nutrient-level goals.
+    """
+    text = query.lower()
+    kwargs: Dict[str, Any] = {}
+
+    # 1. Meal Type
+    if "breakfast" in text:
+        kwargs["meal_type"] = "Breakfast"
+    elif "lunch" in text:
+        kwargs["meal_type"] = "Lunch"
+    elif "dinner" in text or "supper" in text:
+        kwargs["meal_type"] = "Dinner"
+    elif "snack" in text:
+        kwargs["meal_type"] = "Snack"
+
+    # 2. Goals — map from user-level intent to nutrient-level goals
+    goals: List[str] = []
+
+    if "lose weight" in text or "weight loss" in text or "slimming" in text or "diet" in text:
+        goals.extend(USER_GOAL_TO_NUTRIENT_GOALS["weight_loss"])
+    elif "gain weight" in text or "weight gain" in text:
+        goals.extend(USER_GOAL_TO_NUTRIENT_GOALS["weight_gain"])
+    elif "muscle" in text or "bulk" in text:
+        goals.extend(USER_GOAL_TO_NUTRIENT_GOALS["muscle_gain"])
+    elif "heart" in text or "cardio" in text:
+        goals.extend(USER_GOAL_TO_NUTRIENT_GOALS["heart_health"])
+    elif "blood sugar" in text or "diabetic" in text or "diabetes" in text:
+        goals.extend(USER_GOAL_TO_NUTRIENT_GOALS["blood_sugar_control"])
+
+    # Direct nutrient-goal keywords
+    if "high protein" in text or "protein rich" in text:
+        goals.append("high_protein")
+    if "high fiber" in text or "high fibre" in text or "fiber rich" in text:
+        goals.append("high_fiber")
+    if "low carb" in text:
+        goals.append("low_carbs")
+    if "low fat" in text:
+        goals.append("low_fat")
+    if "low sugar" in text or "no sugar" in text or "sugar free" in text:
+        goals.append("low_sugar")
+    if "low sodium" in text or "low salt" in text:
+        goals.append("low_sodium")
+    if "low cholesterol" in text:
+        goals.append("low_cholesterol")
+    if "healthy" in text or "clean eating" in text:
+        goals.extend(["high_protein", "high_fiber"])
+
+    # Deduplicate goals preserving order
+    if goals:
+        seen = set()
+        unique_goals: List[str] = []
+        for g in goals:
+            if g not in seen:
+                seen.add(g)
+                unique_goals.append(g)
+        kwargs["goals"] = unique_goals
+
+    # 3. Exclude keywords
+    exclude: List[str] = []
+    if "no chicken" in text or "without chicken" in text:
+        exclude.append("chicken")
+    if "no beef" in text or "without beef" in text:
+        exclude.append("beef")
+    if "no pork" in text or "without pork" in text:
+        exclude.append("pork")
+    if "no fish" in text or "without fish" in text:
+        exclude.append("fish")
+    if "vegetarian" in text or "veggie" in text:
+        exclude.extend(["chicken", "beef", "pork", "lamb", "turkey", "duck", "fish",
+                         "salmon", "tuna", "shrimp", "bacon", "ham", "sausage", "steak", "meat"])
+    if "vegan" in text:
+        exclude.extend(["chicken", "beef", "pork", "lamb", "turkey", "duck", "fish",
+                         "salmon", "tuna", "shrimp", "bacon", "ham", "sausage", "steak", "meat",
+                         "milk", "cheese", "butter", "yogurt", "egg", "cream", "honey"])
+    if exclude:
+        seen_ex = set()
+        unique_ex: List[str] = []
+        for e in exclude:
+            if e not in seen_ex:
+                seen_ex.add(e)
+                unique_ex.append(e)
+        kwargs["exclude_keywords"] = unique_ex
+
+    # 4. Calorie limits from text
+    import re
+    cal_match = re.search(r"under\s+(\d+)\s*(?:cal|kcal|calories)", text)
+    if cal_match:
+        kwargs["max_calories"] = float(cal_match.group(1))
+
+    return Preferences(**kwargs)
+
+
 def merge_preferences(form_req: RecommendRequest, llm_prefs: Optional[Preferences]) -> Preferences:
     """
     Merges form preferences and LLM-extracted preferences.
@@ -64,12 +172,28 @@ def recommend(request: RecommendRequest, conn: sqlite3.Connection) -> RecommendR
     warnings: List[str] = []
     llm_prefs: Optional[Preferences] = None
 
-    # Step 1: If free-text query is provided, call LLM
+    # Step 1: If free-text query is provided, try LLM first, then fallback to offline parser
     if request.query and request.query.strip():
         extracted, warn = extract_preferences_from_query(request.query.strip())
         if warn:
             warnings.append(warn)
         llm_prefs = extracted
+
+        # Fallback: if LLM failed or returned no useful goals, use offline parser
+        if llm_prefs is None or (not llm_prefs.goals and not llm_prefs.meal_type):
+            offline_prefs = parse_query_for_recommend(request.query.strip())
+            if llm_prefs is None:
+                llm_prefs = offline_prefs
+            else:
+                # Merge: offline fills in what LLM missed
+                if not llm_prefs.goals and offline_prefs.goals:
+                    llm_prefs = llm_prefs.model_copy(update={"goals": offline_prefs.goals})
+                if not llm_prefs.meal_type and offline_prefs.meal_type:
+                    llm_prefs = llm_prefs.model_copy(update={"meal_type": offline_prefs.meal_type})
+                if not llm_prefs.exclude_keywords and offline_prefs.exclude_keywords:
+                    llm_prefs = llm_prefs.model_copy(update={"exclude_keywords": offline_prefs.exclude_keywords})
+                if not llm_prefs.max_calories and offline_prefs.max_calories:
+                    llm_prefs = llm_prefs.model_copy(update={"max_calories": offline_prefs.max_calories})
 
     # Step 2: Merge form values and LLM preferences
     prefs = merge_preferences(request, llm_prefs)

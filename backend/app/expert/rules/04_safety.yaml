@@ -1,0 +1,34 @@
+layer: safety
+rules:
+  - id: S01
+    name: Under 18, no calorie targets
+    priority: 100
+    if: {all: [{fact: user.age, lt: 18}]}
+    then: [{warn: "Personal calorie targets are not calculated for users under 18. Results use general nutrient rules only; please ask a doctor or dietitian."}]
+    basis: team_defined
+    source: S11
+
+  - id: S02
+    name: Health condition disclaimer
+    priority: 100
+    if: {all: [{fact: user.conditions, has_any: [hypertension, type2_diabetes, high_cholesterol]}]}
+    then: [{warn: "Because you listed a health condition, treat these suggestions as general information and follow your doctor's or dietitian's advice."}]
+    basis: team_defined
+    source: S11
+
+  - id: S03
+    name: Calorie floor was applied
+    priority: 90
+    if: {all: [{fact: derived.floor_applied, is: true}]}
+    then: [{warn: "A minimum daily calorie floor was applied to your target. Very low calorie diets should only be done under medical supervision."}]
+    basis: guideline_derived
+    source: S10
+
+  - id: S04
+    name: General disclaimer
+    priority: 10
+    if: always
+    then: [{warn: "This is a student project, not medical or dietary advice."}]
+    basis: team_defined
+    source: S11
+

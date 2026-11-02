@@ -1,7 +1,7 @@
 import os
 import sqlite3
 from contextlib import asynccontextmanager
-from typing import Any, Dict
+from typing import Any, Dict, List
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -16,32 +16,43 @@ from app.config import (
     USE_LOCAL_LLM,
 )
 from app.db import get_connection, get_db
+from app.expert.consult import consult
+from app.expert.engine import run_forward_chaining
+from app.expert.explain import explain_why_not
+from app.expert.knowledge_base import get_knowledge_base
+from app.expert.memory import WorkingMemory
 from app.pipeline import recommend
 from app.schemas import (
+    ConsultRequest,
+    ConsultResponse,
     HealthResponse,
     NutrientRange,
     OptionsResponse,
+    Question,
     RecommendRequest,
     RecommendResponse,
+    WhyNotRequest,
+    WhyNotResponse,
 )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Verify DB exists on startup
     if not os.path.exists(DB_PATH):
         print(f"Warning: Database at {DB_PATH} not found. Run build_database.py first.")
+    # Eagerly load knowledge base and verify rules on startup
+    kb = get_knowledge_base()
+    print(f"Expert system initialized: {len(kb.rules)} rules, {len(kb.questions)} questions loaded.")
     yield
 
 
 app = FastAPI(
-    title="Nutrition-Based Food Recommender API",
-    description="Rule-based filtering, soft goal-based ranking, and Gemini-powered query interpretation.",
-    version="1.0.0",
+    title="Food Recommendation Expert System API",
+    description="Forward-chaining rule engine, certainty factors, working memory, and explanation facility.",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
-# Optional CORS middleware for development flexibility
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -62,6 +73,9 @@ def health_check(conn: sqlite3.Connection = Depends(get_db)):
         print(f"Health check DB error: {e}")
         food_count = 0
 
+    kb = get_knowledge_base()
+    rules_count = len(kb.rules)
+
     if USE_LOCAL_LLM:
         llm_configured = bool(OLLAMA_MODEL and OLLAMA_MODEL.strip())
         provider = "ollama"
@@ -74,6 +88,7 @@ def health_check(conn: sqlite3.Connection = Depends(get_db)):
     return HealthResponse(
         status="ok",
         foods=food_count,
+        rules_loaded=rules_count,
         llm_configured=llm_configured,
         llm_provider=provider,
         llm_model=model,
@@ -145,18 +160,102 @@ def get_options(conn: sqlite3.Connection = Depends(get_db)):
     )
 
 
+# ==============================================================================
+# Expert System Endpoints
+# ==============================================================================
+
+@app.get("/api/questions", response_model=List[Dict[str, Any]])
+def get_questions():
+    """Returns consultation wizard questions from questions.yaml with 'why' and 'ask_if'."""
+    kb = get_knowledge_base()
+    return [q.model_dump() for q in kb.questions]
+
+
+@app.get("/api/rules", response_model=List[Dict[str, Any]])
+def get_rules():
+    """Returns metadata for all rules in the knowledge base."""
+    kb = get_knowledge_base()
+    return [
+        {
+            "id": r.id,
+            "layer": r.layer,
+            "name": r.name,
+            "basis": r.basis,
+            "source": r.source,
+            "priority": r.priority,
+            "note": r.note,
+        }
+        for r in kb.rules
+    ]
+
+
+@app.get("/api/rules/{rule_id}", response_model=Dict[str, Any])
+def get_rule_by_id(rule_id: str):
+    """Returns full details of a specific rule."""
+    kb = get_knowledge_base()
+    r = kb.rules_by_id.get(rule_id)
+    if not r:
+        raise HTTPException(status_code=404, detail=f"Rule '{rule_id}' not found.")
+    return r.model_dump(by_alias=True)
+
+
+@app.post("/api/consult", response_model=ConsultResponse)
+def post_consult(
+    request: ConsultRequest,
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Main expert system endpoint: user facts -> forward-chaining -> constraints -> CF ranking."""
+    try:
+        return consult(request, conn)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/why-not", response_model=WhyNotResponse)
+def post_why_not(
+    request: WhyNotRequest,
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Explains why a given food was not included in the consultation recommendations."""
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM foods WHERE name LIKE ? LIMIT 1", (f"%{request.food_name}%",))
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Food item '{request.food_name}' not found in dataset.")
+
+    food_dict = dict(row)
+
+    # Re-run Phase A to obtain constraints and trace
+    kb = get_knowledge_base()
+    norm_facts = {}
+    for k, v in request.facts.items():
+        if k in ("goal", "meal_type", "conditions", "diet", "want_calorie_target", "age", "sex", "height_cm", "weight_kg", "activity_level"):
+            norm_facts[f"user.{k}"] = v
+        else:
+            norm_facts[k] = v
+
+    memory = WorkingMemory(initial_facts=norm_facts)
+    phase_a_trace = run_forward_chaining(kb.get_phase_a_rules(), memory)
+
+    res = explain_why_not(food_dict, memory.constraints, phase_a_trace)
+    return WhyNotResponse(**res)
+
+
+# ==============================================================================
+# Legacy / Manual Mode Endpoint
+# ==============================================================================
+
 @app.post("/api/recommend", response_model=RecommendResponse)
 def post_recommend(
     request: RecommendRequest,
     conn: sqlite3.Connection = Depends(get_db),
 ):
+    """Manual/advanced mode endpoint with direct filter control."""
     try:
         return recommend(request, conn)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Serve frontend static assets if the directory exists
 if os.path.exists(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
-

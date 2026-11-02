@@ -1,0 +1,84 @@
+questions:
+  - id: Q01
+    fact: user.goal
+    text: "What is your main goal?"
+    type: single
+    options: [weight_loss, weight_gain, muscle_gain, maintain, heart_health, blood_sugar_control]
+    required: true
+    why: "Almost every profile rule starts from your goal; it decides the calorie adjustment, nutrient limits and ranking."
+
+  - id: Q02
+    fact: user.meal_type
+    text: "Which meal are you choosing for?"
+    type: single
+    options: [Breakfast, Lunch, Dinner, Snack]
+    required: true
+    why: "Calorie share, calorie caps and the typical categories differ by meal."
+
+  - id: Q03
+    fact: user.conditions
+    text: "Optional: do any of these apply to you? (Only choose if you want condition-based limits.)"
+    type: multi
+    options: [hypertension, type2_diabetes, high_cholesterol]
+    required: false
+    why: "These switch on sodium, sugar/carb or cholesterol/fat limits. Skipping means no condition-based limits."
+    note: "Sensitive. Never store the answer; never send it to Gemini (see section 12)."
+
+  - id: Q04
+    fact: user.diet
+    text: "Any food preferences?"
+    type: multi
+    options: [vegetarian, vegan, no_beef, no_pork]
+    required: false
+    why: "These add words to the exclude list (keyword based, so check the results)."
+
+  - id: Q05
+    fact: user.want_calorie_target
+    text: "Do you want a personal calorie target for this meal? (needs a few body details)"
+    type: boolean
+    required: false
+    why: "A personal calorie budget needs age, sex, height, weight and activity. If you say no, we skip those questions."
+
+  - id: Q06
+    fact: user.age
+    text: "Age (years)?"
+    type: number
+    min: 10
+    max: 100
+    ask_if: {all: [{fact: user.want_calorie_target, is: true}]}
+    why: "Used in the calorie formula (rule D06). Users under 18 do not get a calorie target (rule S01)."
+
+  - id: Q07
+    fact: user.sex
+    text: "Sex used for the calorie formula?"
+    type: single
+    options: [male, female]
+    ask_if: {all: [{fact: user.want_calorie_target, is: true}]}
+    why: "The Mifflin-St Jeor formula has separate constants (rule D06)."
+
+  - id: Q08
+    fact: user.height_cm
+    text: "Height (cm)?"
+    type: number
+    min: 100
+    max: 230
+    ask_if: {all: [{fact: user.want_calorie_target, is: true}]}
+    why: "Needed for BMI (rule D01) and the calorie formula (rule D06)."
+
+  - id: Q09
+    fact: user.weight_kg
+    text: "Weight (kg)?"
+    type: number
+    min: 25
+    max: 250
+    ask_if: {all: [{fact: user.want_calorie_target, is: true}]}
+    why: "Needed for BMI (rule D01) and the calorie formula (rule D06)."
+
+  - id: Q10
+    fact: user.activity_level
+    text: "How active are you in a normal week?"
+    type: single
+    options: [sedentary, light, moderate, very_active]
+    ask_if: {all: [{fact: user.want_calorie_target, is: true}]}
+    why: "Scales your energy needs (rules D07 to D10, D15)."
+

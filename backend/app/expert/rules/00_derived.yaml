@@ -1,0 +1,173 @@
+layer: derived
+rules:
+  - id: D01
+    name: BMI from weight and height
+    priority: 100
+    if: {all: [{fact: user.weight_kg, exists: true}, {fact: user.height_cm, exists: true}]}
+    then: [{compute: {fact: derived.bmi, fn: bmi, args: [user.weight_kg, user.height_cm]}}]
+    basis: formula
+    source: S6
+
+  - id: D02
+    name: BMI category underweight
+    priority: 90
+    if: {all: [{fact: derived.bmi, lt: 18.5}]}
+    then: [{set: {fact: derived.bmi_category, value: underweight}}]
+    basis: guideline
+    source: S6
+
+  - id: D03
+    name: BMI category normal
+    priority: 90
+    if: {all: [{fact: derived.bmi, gte: 18.5}, {fact: derived.bmi, lt: 25}]}
+    then: [{set: {fact: derived.bmi_category, value: normal}}]
+    basis: guideline
+    source: S6
+
+  - id: D04
+    name: BMI category overweight
+    priority: 90
+    if: {all: [{fact: derived.bmi, gte: 25}, {fact: derived.bmi, lt: 30}]}
+    then: [{set: {fact: derived.bmi_category, value: overweight}}]
+    basis: guideline
+    source: S6
+    note: "Decision D1: switch to gte 23 / lt 25 if the team picks Asian cut-offs (S9)."
+
+  - id: D05
+    name: BMI category obese
+    priority: 90
+    if: {all: [{fact: derived.bmi, gte: 30}]}
+    then: [{set: {fact: derived.bmi_category, value: obese}}]
+    basis: guideline
+    source: S6
+    note: "Decision D1: use gte 25 if Asian cut-offs are chosen."
+
+  - id: D06
+    name: Basal metabolic rate (Mifflin-St Jeor)
+    priority: 100
+    if: {all: [{fact: user.age, exists: true}, {fact: user.sex, in: [male, female]}, {fact: user.weight_kg, exists: true}, {fact: user.height_cm, exists: true}]}
+    then: [{compute: {fact: derived.bmr, fn: bmr_mifflin, args: [user.sex, user.weight_kg, user.height_cm, user.age]}}]
+    basis: formula
+    source: S6
+
+  - id: D07
+    name: Activity factor sedentary
+    priority: 100
+    if: {all: [{fact: user.activity_level, is: sedentary}]}
+    then: [{set: {fact: derived.activity_factor, value: 1.2}}]
+    basis: guideline
+    source: S6
+
+  - id: D08
+    name: Activity factor light
+    priority: 100
+    if: {all: [{fact: user.activity_level, is: light}]}
+    then: [{set: {fact: derived.activity_factor, value: 1.375}}]
+    basis: guideline
+    source: S6
+
+  - id: D09
+    name: Activity factor moderate
+    priority: 100
+    if: {all: [{fact: user.activity_level, is: moderate}]}
+    then: [{set: {fact: derived.activity_factor, value: 1.55}}]
+    basis: guideline
+    source: S6
+
+  - id: D10
+    name: Activity factor very active
+    priority: 100
+    if: {all: [{fact: user.activity_level, is: very_active}]}
+    then: [{set: {fact: derived.activity_factor, value: 1.725}}]
+    basis: guideline
+    source: S6
+
+  - id: D11
+    name: Calorie adjustment for weight loss
+    priority: 80
+    if: {all: [{fact: user.goal, is: weight_loss}]}
+    then: [{set: {fact: derived.calorie_adjustment, value: -500}}]
+    basis: team_defined
+    source: S11
+    note: "Common rule of thumb of about 0.5 kg per week; an approximation, not an exact law."
+
+  - id: D12
+    name: Calorie adjustment for weight gain
+    priority: 80
+    if: {all: [{fact: user.goal, is: weight_gain}]}
+    then: [{set: {fact: derived.calorie_adjustment, value: 500}}]
+    basis: team_defined
+    source: S11
+
+  - id: D13
+    name: Calorie adjustment for muscle gain
+    priority: 80
+    if: {all: [{fact: user.goal, is: muscle_gain}]}
+    then: [{set: {fact: derived.calorie_adjustment, value: 300}}]
+    basis: team_defined
+    source: S11
+
+  - id: D14
+    name: No calorie adjustment for maintenance-type goals
+    priority: 80
+    if: {all: [{fact: user.goal, in: [maintain, heart_health, blood_sugar_control]}]}
+    then: [{set: {fact: derived.calorie_adjustment, value: 0}}]
+    basis: team_defined
+    source: S11
+
+  - id: D15
+    name: Total daily energy expenditure
+    priority: 70
+    if: {all: [{fact: derived.bmr, exists: true}, {fact: derived.activity_factor, exists: true}]}
+    then: [{compute: {fact: derived.tdee, fn: product, args: [derived.bmr, derived.activity_factor]}}]
+    basis: formula
+    source: S6
+
+  - id: D16
+    name: Daily calorie target (adults only, with safety floor)
+    priority: 60
+    if: {all: [{fact: derived.tdee, exists: true}, {fact: derived.calorie_adjustment, exists: true}, {fact: user.age, gte: 18}, {fact: user.sex, in: [male, female]}]}
+    then: [{compute: {fact: derived.daily_calories, fn: daily_calories, args: [derived.tdee, derived.calorie_adjustment, user.sex]}}]
+    basis: guideline_derived
+    source: S10
+
+  - id: D17
+    name: Share of daily calories for breakfast
+    priority: 60
+    if: {all: [{fact: user.meal_type, is: Breakfast}]}
+    then: [{set: {fact: derived.meal_share, value: 0.25}}]
+    basis: team_defined
+    source: S11
+
+  - id: D18
+    name: Share of daily calories for lunch
+    priority: 60
+    if: {all: [{fact: user.meal_type, is: Lunch}]}
+    then: [{set: {fact: derived.meal_share, value: 0.35}}]
+    basis: team_defined
+    source: S11
+
+  - id: D19
+    name: Share of daily calories for dinner
+    priority: 60
+    if: {all: [{fact: user.meal_type, is: Dinner}]}
+    then: [{set: {fact: derived.meal_share, value: 0.30}}]
+    basis: team_defined
+    source: S11
+
+  - id: D20
+    name: Share of daily calories for a snack
+    priority: 60
+    if: {all: [{fact: user.meal_type, is: Snack}]}
+    then: [{set: {fact: derived.meal_share, value: 0.10}}]
+    basis: team_defined
+    source: S11
+
+  - id: D21
+    name: Calorie budget for this meal
+    priority: 50
+    if: {all: [{fact: derived.daily_calories, exists: true}, {fact: derived.meal_share, exists: true}]}
+    then: [{compute: {fact: derived.meal_calorie_budget, fn: product, args: [derived.daily_calories, derived.meal_share]}}]
+    basis: formula
+    source: S11
+

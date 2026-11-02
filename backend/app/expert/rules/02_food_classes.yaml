@@ -1,0 +1,199 @@
+layer: food_class
+rules:
+  # --- nutrient claim style tags -----------------------------------------
+  - id: F01
+    name: Good protein source
+    if: {all: [{fact: food.protein_g, gte: 10}]}
+    then: [{tag: protein_good}]
+    basis: label_claim
+    source: S4
+    note: "FDA 'high' is 20% of the 50 g Daily Value = 10 g."
+
+  - id: F02
+    name: High protein meal
+    if: {all: [{fact: food.protein_g, gte: 20}]}
+    then: [{tag: high_protein}]
+    basis: team_defined
+    source: S7
+    note: "Matches the ISSN 20 g per feeding figure."
+
+  - id: F03
+    name: Good fibre source
+    if: {all: [{fact: food.fiber_g, gte: 2.8}]}
+    then: [{tag: fiber_good}]
+    basis: label_claim
+    source: S4
+    note: "10% of the 28 g Daily Value."
+
+  - id: F04
+    name: High fibre
+    if: {all: [{fact: food.fiber_g, gte: 5.6}]}
+    then: [{tag: high_fiber}]
+    basis: label_claim
+    source: S4
+    note: "20% of the 28 g Daily Value."
+
+  - id: F05
+    name: Low sodium
+    if: {all: [{fact: food.sodium_mg, lte: 140}]}
+    then: [{tag: low_sodium}]
+    basis: label_claim
+    source: S4
+
+  - id: F06
+    name: Very low sodium
+    if: {all: [{fact: food.sodium_mg, lte: 35}]}
+    then: [{tag: very_low_sodium}]
+    basis: label_claim
+    source: S4
+
+  - id: F07
+    name: High sodium
+    if: {all: [{fact: food.sodium_mg, gte: 460}]}
+    then: [{tag: high_sodium}]
+    basis: label_claim
+    source: S4
+    note: "20% of the 2300 mg Daily Value."
+
+  - id: F08
+    name: Low fat
+    if: {all: [{fact: food.fat_g, lte: 3}]}
+    then: [{tag: low_fat}]
+    basis: label_claim
+    source: S4
+
+  - id: F09
+    name: High fat
+    if: {all: [{fact: food.fat_g, gte: 15.6}]}
+    then: [{tag: high_fat}]
+    basis: label_claim
+    source: S4
+    note: "20% of the 78 g Daily Value."
+
+  - id: F10
+    name: Low cholesterol
+    if: {all: [{fact: food.cholesterol_mg, lte: 20}]}
+    then: [{tag: low_cholesterol}]
+    basis: label_claim
+    source: S4
+    note: "The real FDA claim also limits saturated fat, which the dataset does not have."
+
+  - id: F11
+    name: Cholesterol free
+    if: {all: [{fact: food.cholesterol_mg, lte: 2}]}
+    then: [{tag: cholesterol_free}]
+    basis: label_claim
+    source: S4
+
+  - id: F12
+    name: High cholesterol item
+    if: {all: [{fact: food.cholesterol_mg, gte: 60}]}
+    then: [{tag: high_cholesterol_item}]
+    basis: label_claim
+    source: S4
+    note: "20% of the 300 mg Daily Value."
+
+  - id: F13
+    name: Low sugar
+    if: {all: [{fact: food.sugars_g, lte: 5}]}
+    then: [{tag: low_sugar}]
+    basis: team_defined
+    source: S11
+
+  - id: F14
+    name: Sugar free
+    if: {all: [{fact: food.sugars_g, lt: 0.5}]}
+    then: [{tag: sugar_free}]
+    basis: label_claim
+    source: S4
+
+  - id: F15
+    name: High sugar
+    if: {all: [{fact: food.sugars_g, gte: 15}]}
+    then: [{tag: high_sugar}]
+    basis: team_defined
+    source: S11
+
+  - id: F16
+    name: Low carbohydrate
+    if: {all: [{fact: food.carbs_g, lte: 15}]}
+    then: [{tag: low_carb}]
+    basis: team_defined
+    source: S11
+
+  - id: F17
+    name: High carbohydrate
+    if: {all: [{fact: food.carbs_g, gte: 45}]}
+    then: [{tag: high_carb}]
+    basis: team_defined
+    source: S11
+
+  - id: F18
+    name: Light meal item (not a condiment)
+    if: {all: [{fact: food.calories, between: [100, 350]}, {fact: food.category_main, is_not: Condiment}]}
+    then: [{tag: light_meal}]
+    basis: team_defined
+    source: S11
+
+  - id: F19
+    name: Heavy meal item
+    if: {all: [{fact: food.calories, gte: 600}]}
+    then: [{tag: heavy_meal}]
+    basis: team_defined
+    source: S11
+
+  # --- composite tags (they read tags created above, so they chain) -------
+  - id: F20
+    name: Balanced meal
+    priority: 10
+    if:
+      all:
+        - {fact: food.tags, has: protein_good}
+        - {fact: food.tags, has: fiber_good}
+        - {not: {fact: food.tags, has: high_sodium}}
+        - {not: {fact: food.tags, has: heavy_meal}}
+        - {not: {fact: food.tags, has: high_sugar}}
+        - {fact: food.calories, between: [200, 600]}
+    then: [{tag: balanced_meal}]
+    basis: team_defined
+    source: S3
+
+  - id: F21
+    name: Weight-loss friendly
+    priority: 10
+    if:
+      all:
+        - {fact: food.tags, has: protein_good}
+        - {not: {fact: food.tags, has: high_fat}}
+        - {not: {fact: food.tags, has: heavy_meal}}
+        - {not: {fact: food.tags, has: high_sugar}}
+    then: [{tag: weight_loss_friendly}]
+    basis: team_defined
+    source: S11
+
+  - id: F22
+    name: Heart friendly
+    priority: 10
+    if:
+      all:
+        - {not: {fact: food.tags, has: high_sodium}}
+        - {not: {fact: food.tags, has: high_cholesterol_item}}
+        - {not: {fact: food.tags, has: high_fat}}
+    then: [{tag: heart_friendly}]
+    basis: team_defined
+    source: S1
+
+  - id: F23
+    name: Blood sugar friendly (heuristic, not clinical)
+    priority: 10
+    if:
+      all:
+        - {not: {fact: food.tags, has: high_sugar}}
+        - {not: {fact: food.tags, has: high_carb}}
+        - any:
+            - {fact: food.tags, has: fiber_good}
+            - {fact: food.tags, has: protein_good}
+    then: [{tag: blood_sugar_friendly}]
+    basis: team_defined
+    source: S8
+

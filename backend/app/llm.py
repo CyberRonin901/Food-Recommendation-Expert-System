@@ -26,6 +26,13 @@ Instructions:
 - Allowed meal types: "Breakfast", "Lunch", "Dinner", "Snack".
 - Allowed categories: "Condiment", "Meal", "Vegetable", "Grain", "Beverage", "Protein", "Fruit", "Dairy", "Dessert", "Snack", "Nut", "Legume", "Supplement".
 - Allowed goals: "high_protein", "high_fiber", "low_carbs", "low_fat", "low_sugar", "low_sodium", "low_cholesterol".
+- IMPORTANT goal mapping: translate the user's intent into the allowed goals above:
+  * "weight loss" / "lose weight" / "diet" / "slimming" -> goals: ["high_protein", "high_fiber"]
+  * "muscle gain" / "build muscle" / "bulk" / "bulk up" -> goals: ["high_protein"]
+  * "heart health" / "heart healthy" / "cardio" -> goals: ["low_sodium", "low_cholesterol", "low_fat", "high_fiber"]
+  * "blood sugar" / "diabetic" / "diabetes" -> goals: ["low_sugar", "high_fiber", "low_carbs"]
+  * "healthy" / "clean eating" -> goals: ["high_protein", "high_fiber", "low_fat"]
+  * "low calorie" / "light" -> set max_calories to a reasonable limit (e.g. 400) and goals: ["high_protein", "high_fiber"]
 - If the user specifies ingredient inclusions, put them into include_keywords (e.g. ["salmon"]).
 - If the user specifies exclusions, put them into exclude_keywords (e.g. ["chicken", "pork"]).
 - top_k is an integer between 1 and 50 if the user explicitly requested a count (e.g. "give me 3 breakfast ideas" -> top_k: 3).

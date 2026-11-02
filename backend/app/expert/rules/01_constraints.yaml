@@ -1,0 +1,199 @@
+layer: constraint
+rules:
+  - id: C01
+    name: Calorie cap from personal meal budget
+    priority: 50
+    if: {all: [{fact: derived.meal_calorie_budget, exists: true}]}
+    then: [{tighten_max: {limit: max_calories, value: "$derived.meal_calorie_budget"}}]
+    basis: guideline_derived
+    source: S6
+
+  - id: C02
+    name: Ignore tiny items for main meals
+    priority: 40
+    if: {all: [{fact: user.meal_type, in: [Breakfast, Lunch, Dinner]}]}
+    then: [{tighten_min: {limit: min_calories, value: 150}}]
+    basis: team_defined
+    source: S11
+    note: "Dataset has garnishes and condiments with near-zero calories (README 3.2 problem 6). Tune after viewing real results."
+
+  - id: C03
+    name: Snack calorie cap
+    priority: 40
+    if: {all: [{fact: user.meal_type, is: Snack}]}
+    then: [{tighten_max: {limit: max_calories, value: 250}}]
+    basis: team_defined
+    source: S11
+
+  - id: C04
+    name: Hypertension, limit sodium
+    priority: 70
+    if: {all: [{fact: user.conditions, has: hypertension}]}
+    then:
+      - tighten_max: {limit: max_sodium, value: 500}
+      - add_goal: low_sodium
+    basis: guideline_derived
+    source: S2
+    note: "AHA ideal limit 1500 mg/day divided across 3 meals is about 500 mg."
+
+  - id: C05
+    name: Type 2 diabetes, main meals
+    priority: 70
+    if: {all: [{fact: user.conditions, has: type2_diabetes}, {fact: user.meal_type, in: [Breakfast, Lunch, Dinner]}]}
+    then:
+      - tighten_max: {limit: max_sugars, value: 10}
+      - tighten_max: {limit: max_carbs, value: 60}
+      - add_goal: low_sugar
+      - add_goal: high_fiber
+    basis: team_defined
+    source: S8
+    note: "ADA guidance is individualised and gives no single gram limit; these numbers are our simplification."
+
+  - id: C06
+    name: Type 2 diabetes, snacks
+    priority: 70
+    if: {all: [{fact: user.conditions, has: type2_diabetes}, {fact: user.meal_type, is: Snack}]}
+    then:
+      - tighten_max: {limit: max_sugars, value: 10}
+      - tighten_max: {limit: max_carbs, value: 20}
+      - add_goal: low_sugar
+      - add_goal: high_fiber
+    basis: team_defined
+    source: S8
+
+  - id: C07
+    name: High cholesterol, limit cholesterol and fat
+    priority: 70
+    if: {all: [{fact: user.conditions, has: high_cholesterol}]}
+    then:
+      - tighten_max: {limit: max_cholesterol, value: 100}
+      - tighten_max: {limit: max_fat, value: 22}
+      - add_goal: low_cholesterol
+      - add_goal: low_fat
+    basis: guideline_derived
+    source: S4
+    note: "300 mg/day (FDA Daily Value) divided by 3 meals; fat is 30% of about 2000 kcal (within the 20-35% range, S5) divided by 3 meals."
+
+  - id: C08
+    name: Goal heart health
+    priority: 60
+    if: {all: [{fact: user.goal, is: heart_health}]}
+    then:
+      - tighten_max: {limit: max_sodium, value: 600}
+      - tighten_max: {limit: max_cholesterol, value: 100}
+      - add_goal: low_sodium
+      - add_goal: low_cholesterol
+      - add_goal: low_fat
+      - add_goal: high_fiber
+    basis: guideline_derived
+    source: S1
+
+  - id: C09
+    name: Goal blood sugar control
+    priority: 60
+    if: {all: [{fact: user.goal, is: blood_sugar_control}]}
+    then:
+      - tighten_max: {limit: max_sugars, value: 10}
+      - add_goal: low_sugar
+      - add_goal: high_fiber
+      - add_goal: low_carbs
+    basis: team_defined
+    source: S8
+
+  - id: C10
+    name: Goal weight loss, favour protein and fibre for fullness
+    priority: 60
+    if: {all: [{fact: user.goal, is: weight_loss}]}
+    then:
+      - add_goal: high_protein
+      - add_goal: high_fiber
+    basis: team_defined
+    source: S11
+
+  - id: C11
+    name: Goal muscle gain, protein per meal
+    priority: 60
+    if: {all: [{fact: user.goal, is: muscle_gain}]}
+    then:
+      - tighten_min: {limit: min_protein, value: 20}
+      - add_goal: high_protein
+    basis: guideline
+    source: S7
+    note: "ISSN position stand: about 20-40 g protein per feeding."
+
+  - id: C12
+    name: Goal weight gain, minimum energy for main meals
+    priority: 60
+    if: {all: [{fact: user.goal, is: weight_gain}, {fact: user.meal_type, in: [Breakfast, Lunch, Dinner]}]}
+    then:
+      - tighten_min: {limit: min_calories, value: 300}
+      - add_goal: high_protein
+    basis: team_defined
+    source: S11
+
+  - id: C13
+    name: Underweight BMI, avoid very light main-meal items
+    priority: 50
+    if: {all: [{fact: derived.bmi_category, is: underweight}, {fact: user.meal_type, in: [Breakfast, Lunch, Dinner]}]}
+    then: [{tighten_min: {limit: min_calories, value: 250}}]
+    basis: team_defined
+    source: S11
+
+  - id: C14
+    name: Overweight or obese BMI with a maintain goal, suggest calorie awareness
+    priority: 50
+    if: {all: [{fact: derived.bmi_category, in: [overweight, obese]}, {fact: user.goal, is: maintain}]}
+    then:
+      - set: {fact: derived.suggested_focus, value: calorie_control}
+      - warn: "Your BMI is above the usual healthy range, so results lean towards protein and fibre. This is general information, not medical advice."
+    basis: team_defined
+    source: S6
+
+  - id: C15
+    name: Calorie-awareness focus favours protein and fibre
+    priority: 40
+    if: {all: [{fact: derived.suggested_focus, is: calorie_control}]}
+    then:
+      - add_goal: high_protein
+      - add_goal: high_fiber
+    basis: team_defined
+    source: S11
+    note: "Exists mainly to demonstrate a 3-step chain: BMI -> category -> focus -> goals."
+
+  - id: C16
+    name: Vegetarian preference (keyword based)
+    priority: 50
+    if: {all: [{fact: user.diet, has: vegetarian}]}
+    then:
+      - add_exclude: [chicken, beef, pork, lamb, turkey, duck, fish, salmon, tuna, cod, tilapia, shrimp, prawn, crab, lobster, bacon, ham, sausage, salami, pepperoni, prosciutto, steak, meatball, meatballs, meat, bolognese, carbonara, cheesesteak, reuben, gravy, anchovy, anchovies, sardine]
+      - warn: "Vegetarian filtering is keyword based and can miss or wrongly remove dishes. Check the names."
+    basis: team_defined
+    source: S11
+    note: "README 3.3 explains why this is unreliable. Extend the list after scanning the 593 food names (T1.9)."
+
+  - id: C17
+    name: Vegan preference (keyword based)
+    priority: 50
+    if: {all: [{fact: user.diet, has: vegan}]}
+    then:
+      - add_exclude: [chicken, beef, pork, lamb, turkey, duck, fish, salmon, tuna, cod, tilapia, shrimp, prawn, crab, lobster, bacon, ham, sausage, salami, pepperoni, prosciutto, steak, meatball, meatballs, meat, bolognese, carbonara, cheesesteak, reuben, gravy, anchovy, anchovies, sardine, milk, cheese, butter, yogurt, yoghurt, egg, eggs, cream, honey, whey, mayonnaise, paneer, ghee]
+      - warn: "Vegan filtering is keyword based and can miss or wrongly remove dishes. Check the names."
+    basis: team_defined
+    source: S11
+
+  - id: C18
+    name: No beef preference
+    priority: 50
+    if: {all: [{fact: user.diet, has: no_beef}]}
+    then: [{add_exclude: [beef, veal, brisket]}]
+    basis: team_defined
+    source: S11
+
+  - id: C19
+    name: No pork preference
+    priority: 50
+    if: {all: [{fact: user.diet, has: no_pork}]}
+    then: [{add_exclude: [pork, bacon, ham, prosciutto, salami, pepperoni, chorizo, sausage, pancetta]}]
+    basis: team_defined
+    source: S11
+
